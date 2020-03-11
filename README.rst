@@ -77,7 +77,11 @@ The dtool lookup server stores administrative metadata in a SQL database.
 By default it uses a SQLite database. However, this can be configured by
 setting the ``SQLALCHEMY_DATABASE_URI``, i.e using something along the lines of::
 
-    export SQLALCHEMY_DATABASE_URI=mysql://username:password@server/db
+    $ export SQLALCHEMY_DATABASE_URI=mysql://username:password@server/db
+
+or::
+
+    $ export SQLALCHEMY_DATABASE_URI=sqlite:////absolute/path/to/app.db
 
 For more information see `flask-SQLAlchemy
 <http://flask-sqlalchemy.pocoo.org>`_.
@@ -90,6 +94,8 @@ Populate the SQL database with tables using the commands below::
     $ flask db init
     $ flask db migrate
     $ flask db upgrade
+
+Note that the Mongo database needs to be running for this to work (see next section).
 
 Configure the Mongo database
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -113,22 +119,31 @@ The dtool lookup server implements authentication using JSON Web Tokens.
 It is possible to delegate the generation of JSON Web Tokens to a different
 service as long as one has access to the public key::
 
-    export JWT_PUBLIC_KEY_FILE=~/.ssh/id_rsa.pub
+    $ export JWT_PUBLIC_KEY_FILE=~/.ssh/id_rsa.pub
 
 If one has access to the private key as well one can use the ``flask user
 token`` command line utility to generate a token for the user. To enable this
 one has to set the ``JWT_PRIVATE_KEY_FILE`` environment variable::
 
-    export JWT_PRIVATE_KEY_FILE=~/.ssh/id_rsa
+    $ export JWT_PRIVATE_KEY_FILE=~/.ssh/id_rsa
 
-Mac users be warned that the Mac's implementation ``ssh-keygen`` may result in
+Mac users be warned that the Mac's implementation ``ssh-keygen`` result in
 files that do not adhere to the RFC standard. As such you may get a warning
 along the lines of::
 
     ValueError: Could not deserialize key data.
 
-In this case you need to find a version of ``ssh-keygen`` that generates files
-that adhere to the RFC standard, the easiest is probably to generate them in Linux.
+Th easiest solution is to generate the private and public key directly with
+``openssl``::
+
+    $ openssl genrsa -out jwt_key 4096
+
+This creates a 4096-bit key in the file ``jwt-key``. It can be converted into a
+public key::
+
+    $ openssl rsa -in jwt_key -pubout jwt_key.pub
+
+Note that these keys typically cannot be used for ``ssh`` authentication.
 
 Making use of JSON Web Tokens from a different server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -137,7 +152,7 @@ When making use of JSON Web Tokens from a different server it may be easier to
 use configure the server using the pubic key directly rather than the public key
 file::
 
-    export JWT_PUBLIC_KEY="ssh-rsa XXXXXX user@localhost"
+    $ export JWT_PUBLIC_KEY="ssh-rsa XXXXXX user@localhost"
 
 Starting the flask app
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -253,8 +268,8 @@ The command below lists the users registered in the dtool lookup server::
 The dtool lookup server API
 ---------------------------
 
-The dtool lookup server makes use of the Authrized header to pass through the
-JSON web token for authrization. Below we create environment variables for the
+The dtool lookup server makes use of the authorized header to pass through the
+JSON web token for authorization. Below we create environment variables for the
 token and the header used in the ``curl`` commands::
 
     $ TOKEN=$(flask user token olssont)
