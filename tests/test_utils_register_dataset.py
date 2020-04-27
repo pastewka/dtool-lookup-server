@@ -13,7 +13,7 @@ def test_register_dataset(tmp_app):   # NOQA
         update_permissions,
         register_dataset,
         get_admin_metadata_from_uri,
-        get_readme_from_uri,
+        get_readme_from_uri_by_user,
     )
 
     register_users([
@@ -55,6 +55,8 @@ def test_register_dataset(tmp_app):   # NOQA
         "creator_username": "olssont",
         "frozen_at": 1536238185.881941,
         "created_at": 1536236399.19497,
+        "annotations": {"software": "bowtie2"},
+        "tags": ["rnaseq"],
     }
 
     register_dataset(dataset_info)
@@ -69,7 +71,7 @@ def test_register_dataset(tmp_app):   # NOQA
         "created_at": 1536236399.19497,
     }
     assert get_admin_metadata_from_uri(uri) == expected_content
-    assert get_readme_from_uri(uri) == dataset_info["readme"]
+    assert get_readme_from_uri_by_user("sleepy", uri) == dataset_info["readme"]
 
     with pytest.raises(ValidationError):
         register_dataset({"name": "not-all-required-metadata"})
@@ -83,7 +85,7 @@ def test_register_dataset_without_created_at(tmp_app):   # NOQA
         update_permissions,
         register_dataset,
         get_admin_metadata_from_uri,
-        get_readme_from_uri,
+        get_readme_from_uri_by_user,
     )
 
     register_users([
@@ -124,6 +126,8 @@ def test_register_dataset_without_created_at(tmp_app):   # NOQA
         },
         "creator_username": "olssont",
         "frozen_at": 1536238185.881941,
+        "annotations": {"software": "bowtie2"},
+        "tags": ["rnaseq"],
     }
 
     register_dataset(dataset_info)
@@ -139,7 +143,7 @@ def test_register_dataset_without_created_at(tmp_app):   # NOQA
         "created_at": 1536238185.881941,
     }
     assert get_admin_metadata_from_uri(uri) == expected_content
-    assert get_readme_from_uri(uri) == dataset_info["readme"]
+    assert get_readme_from_uri_by_user("sleepy", uri) == dataset_info["readme"]
 
     with pytest.raises(ValidationError):
         register_dataset({"name": "not-all-required-metadata"})

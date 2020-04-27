@@ -30,7 +30,9 @@ def test_dataset_summary_route(tmp_app_with_data):  # NOQA
         "creator_usernames": ["queen"],
         "base_uris": ["s3://mr-men", "s3://snow-white"],
         "datasets_per_creator": {"queen": 3},
-        "datasets_per_base_uri": {"s3://mr-men": 1, "s3://snow-white": 2}
+        "datasets_per_base_uri": {"s3://mr-men": 1, "s3://snow-white": 2},
+        "tags": ["evil", "fruit", "good"],
+        "datasets_per_tag": {"good": 1, "evil": 2, "fruit": 3}
     }
     assert expected_content == json.loads(r.data.decode("utf-8"))
 
@@ -44,7 +46,9 @@ def test_dataset_summary_route(tmp_app_with_data):  # NOQA
         "creator_usernames": [],
         "base_uris": [],
         "datasets_per_creator": {},
-        "datasets_per_base_uri": {}
+        "datasets_per_base_uri": {},
+        "tags": [],
+        "datasets_per_tag": {}
     }
     assert expected_content == json.loads(r.data.decode("utf-8"))
 
@@ -125,7 +129,7 @@ def test_dataset_search_route(tmp_app_with_data):  # NOQA
     )
     assert r.status_code == 401
 
-    # Search for apples.
+    # Search for apples (in README).
     headers = dict(Authorization="Bearer " + grumpy_token)
     query = {"free_text": "apple"}
     r = tmp_app_with_data.post(
@@ -138,12 +142,98 @@ def test_dataset_search_route(tmp_app_with_data):  # NOQA
 
     assert len(json.loads(r.data.decode("utf-8"))) == 2
 
+    # Search for U00096 (in manifest).
+    headers = dict(Authorization="Bearer " + grumpy_token)
+    query = {"free_text": "U00096"}
+    r = tmp_app_with_data.post(
+        "/dataset/search",
+        headers=headers,
+        data=json.dumps(query),
+        content_type="application/json"
+    )
+    assert r.status_code == 200
+
+    assert len(json.loads(r.data.decode("utf-8"))) == 2
+
+    # Search for crazystuff (in annotaitons).
+    headers = dict(Authorization="Bearer " + grumpy_token)
+    query = {"free_text": "crazystuff"}
+    r = tmp_app_with_data.post(
+        "/dataset/search",
+        headers=headers,
+        data=json.dumps(query),
+        content_type="application/json"
+    )
+    assert r.status_code == 200
+
+    assert len(json.loads(r.data.decode("utf-8"))) == 1
+
+
+def test_filter_based_on_tags(tmp_app_with_data):  # NOQA
+
+    headers = dict(Authorization="Bearer " + grumpy_token)
+
+    query = {"tags": ["good"]}
+    r = tmp_app_with_data.post(
+        "/dataset/search",
+        headers=headers,
+        data=json.dumps(query),
+        content_type="application/json"
+    )
+    assert r.status_code == 200
+    assert len(json.loads(r.data.decode("utf-8"))) == 1
+
+    query = {"tags": ["good", "evil"]}
+    r = tmp_app_with_data.post(
+        "/dataset/search",
+        headers=headers,
+        data=json.dumps(query),
+        content_type="application/json"
+    )
+    assert r.status_code == 200
+    assert len(json.loads(r.data.decode("utf-8"))) == 0
+
+    query = {"tags": ["fruit", "evil"]}
+    r = tmp_app_with_data.post(
+        "/dataset/search",
+        headers=headers,
+        data=json.dumps(query),
+        content_type="application/json"
+    )
+    assert r.status_code == 200
+    assert len(json.loads(r.data.decode("utf-8"))) == 2
+
+
+def test_combination_query(tmp_app_with_data):  # NOQA
+
+    headers = dict(Authorization="Bearer " + grumpy_token)
+
+    query = {"free_text": "crazystuff", "tags": ["good"]}
+    r = tmp_app_with_data.post(
+        "/dataset/search",
+        headers=headers,
+        data=json.dumps(query),
+        content_type="application/json"
+    )
+    assert r.status_code == 200
+    assert len(json.loads(r.data.decode("utf-8"))) == 1
+
+    query = {"free_text": "crazystuff", "tags": ["evil"]}
+    r = tmp_app_with_data.post(
+        "/dataset/search",
+        headers=headers,
+        data=json.dumps(query),
+        content_type="application/json"
+    )
+    assert r.status_code == 200
+    assert len(json.loads(r.data.decode("utf-8"))) == 0
+
 
 def test_dataset_register_route(tmp_app_with_users):  # NOQA
 
     from dtool_lookup_server.utils import (
         get_admin_metadata_from_uri,
-        get_readme_from_uri,
+        get_readme_from_uri_by_user,
         lookup_datasets_by_user_and_uuid,
     )
 
@@ -171,6 +261,8 @@ def test_dataset_register_route(tmp_app_with_users):  # NOQA
         },
         "creator_username": "olssont",
         "frozen_at": 1536238185.881941,
+        "annotations": {"software": "bowtie2"},
+        "tags": ["rnaseq"],
     }
 
     for token in [dopey_token, sleepy_token]:
@@ -192,7 +284,7 @@ def test_dataset_register_route(tmp_app_with_users):  # NOQA
     )
     assert r.status_code == 201
 
-    assert get_readme_from_uri(uri) == dataset_info["readme"]
+    assert get_readme_from_uri_by_user("sleepy", uri) == dataset_info["readme"]
 
     expected_content = {
         "base_uri": base_uri,
@@ -229,6 +321,8 @@ def test_dataset_register_route(tmp_app_with_users):  # NOQA
         },
         "creator_username": "olssont",
         "frozen_at": 1536238185.881941,
+        "annotations": {"software": "bowtie2"},
+        "tags": ["rnaseq"],
     }
     r = tmp_app_with_users.post(
         "/dataset/register",
@@ -238,7 +332,7 @@ def test_dataset_register_route(tmp_app_with_users):  # NOQA
     )
     assert r.status_code == 201
 
-    assert get_readme_from_uri(uri) == dataset_info["readme"]
+    assert get_readme_from_uri_by_user("sleepy", uri) == dataset_info["readme"]
     assert get_admin_metadata_from_uri(uri) == expected_content
     assert len(lookup_datasets_by_user_and_uuid("grumpy", uuid)) == 1
 
@@ -309,6 +403,8 @@ def test_dataset_register_route_when_created_at_is_string(tmp_app_with_users):  
         "creator_username": "olssont",
         "frozen_at": 1536238185.881941,
         "created_at": "1536238185.881941",
+        "annotations": {"software": "bowtie2"},
+        "tags": ["rnaseq"],
     }
 
     headers = dict(Authorization="Bearer " + grumpy_token)
@@ -446,7 +542,7 @@ def test_dataset_manifest_route(tmp_app_with_data):  # NOQA
     assert r.status_code == 400
 
 
-def test_dataset_manifest_route(tmp_app_with_data):  # NOQA
+def test_dataset_readme_route(tmp_app_with_data):  # NOQA
 
     headers = dict(Authorization="Bearer " + grumpy_token)
     query = {"uri": "s3://snow-white/af6727bf-29c7-43dd-b42f-a5d7ede28337"}
@@ -459,6 +555,24 @@ def test_dataset_manifest_route(tmp_app_with_data):  # NOQA
     assert r.status_code == 200
 
     expected_readme = {"descripton": "apples from queen"}
+    actual_readme = json.loads(r.data.decode("utf-8"))
+
+    assert expected_readme == actual_readme
+
+
+def test_dataset_annotations_route(tmp_app_with_data):  # NOQA
+
+    headers = dict(Authorization="Bearer " + grumpy_token)
+    query = {"uri": "s3://snow-white/af6727bf-29c7-43dd-b42f-a5d7ede28337"}
+    r = tmp_app_with_data.post(
+        "/dataset/annotations",
+        headers=headers,
+        data=json.dumps(query),
+        content_type="application/json"
+    )
+    assert r.status_code == 200
+
+    expected_readme = {"type": "fruit"}
     actual_readme = json.loads(r.data.decode("utf-8"))
 
     assert expected_readme == actual_readme

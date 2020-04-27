@@ -313,7 +313,7 @@ Summary information about datasets
 
 An overall summary of datasets accessible to a user can be accessed using the request below::
 
-    $ curl -H $HEADER http://localhost:5000/dataset/summary
+    $ curl -H "$HEADER" http://localhost:5000/dataset/summary
 
 The response will contain JSON content along the lines of::
 
@@ -322,7 +322,9 @@ The response will contain JSON content along the lines of::
         "creator_usernames": ["queen"],
         "base_uris": ["s3://mr-men", "s3://snow-white"],
         "datasets_per_creator": {"queen": 3},
-        "datasets_per_base_uri": {"s3://mr-men": 1, "s3://snow-white": 2}
+        "datasets_per_base_uri": {"s3://mr-men": 1, "s3://snow-white": 2},
+        "tags": ["fruit", "veg"],
+        "datasets_per_tag": {"fruit": 2, "veg": 1}
     }
 
 
@@ -332,7 +334,7 @@ Listing all datasets
 All the dataset's that a user has permissions to search for can be listed using
 the request below::
 
-    $ curl -H $HEADER http://localhost:5000/dataset/list
+    $ curl -H "$HEADER" http://localhost:5000/dataset/list
 
 Some of the output of the command above is displayed below::
 
@@ -359,7 +361,7 @@ Searching for specific datasets
 
 The command below does a full text search for the word "microscopy" in the descriptive metadata::
 
-    $ curl -H $HEADER -H "Content-Type: application/json"  \
+    $ curl -H "$HEADER" -H "Content-Type: application/json"  \
         -X POST -d '{"free_text": "microscopy"}'  \
         http://localhost:5000/dataset/search
 
@@ -373,18 +375,6 @@ Below is the result of this search::
         "dtoolcore_version": "3.3.0",
         "frozen_at": "1536749825.85",
         "name": "hypocotyl3",
-        "readme": {
-          "DataDOI": "https://doi.org/10.6084/m9.figshare.3438743.v1",
-          "Device": "Zeiss LSM780",
-          "Experiment Commentary": "Confocal microscopy image of hypocotyl.\nCell walls stained using FM4-64 [5ug/ml].\nNucelus marked using 35s::GFP:eIF3a (see reference for more detail).\n",
-          "Experiment Date": "28 Jan 2016",
-          "Imaging probes": "FM4-64 + GFP-nucleus",
-          "Notes": "Orignal file unpacked using bfconvert 5.0.2",
-          "Objective Lens": "x40/1.2 water",
-          "Organ/tissue type": "Hypocotyl",
-          "ReferenceDOI": "http://dx.doi.org/10.1105/tpc.108.060434",
-          "Species": "Arabidopsis thaliana (Thale cress)"
-        },
         "type": "dataset",
         "uri": "s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db",
         "uuid": "ba92a5fa-d3b4-4f10-bcb9-947f62e652db"
@@ -392,37 +382,50 @@ Below is the result of this search::
     ]
 
 Below is a JSON string specifying a more complex query that will search for
-datasets with "aples" in the "s3://snow-white" bucket created by either
-"grumpy" or "dopey"::
+datasets with "apples" in the "s3://snow-white" bucket created by either
+"grumpy" or "dopey", and has both of the tags "fruit" and "veg"::
 
     {
         "base_uris": ["s3://snow-white"],
         "creator_usernames": ["grumpy", "dopey"],
-        "free_text": "apples"
+        "free_text": "apples",
+        "tags": ["fruit", "veg"]
     }
 
+.. note:: The search engine make use of "OR" logic for the items in
+          ``base_uris`` and ``creator_usernames`` lists, but uses
+          "AND" logic for filtering the search based on the items
+          in the ``tags`` list.
 
-Accessing a dataset's manifest and readme
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The command below retrieves the manifest for the dataset with the
-URI ``s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db``
+Accessing a dataset's readme, annotations and manifest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    $ curl -H $HEADER -H "Content-Type: application/json"  \
-        -X POST -d  \
-        '{"uri": "s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db"}'  \
-        http://localhost:5000/dataset/manifest
 
 
 The command below retrieves the readme for the dataset with the
-URI ``s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db``
+URI ``s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db``::
 
-    $ curl -H $HEADER -H "Content-Type: application/json"  \
+    $ curl -H "$HEADER" -H "Content-Type: application/json"  \
         -X POST -d  \
         '{"uri": "s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db"}'  \
         http://localhost:5000/dataset/readme
 
+The command below retrieves the annotations for the dataset with the
+URI ``s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db``::
 
+    $ curl -H "$HEADER" -H "Content-Type: application/json"  \
+        -X POST -d  \
+        '{"uri": "s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db"}'  \
+        http://localhost:5000/dataset/annotations
+
+The command below retrieves the manifest for the dataset with the
+URI ``s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db``::
+
+    $ curl -H "$HEADER" -H "Content-Type: application/json"  \
+        -X POST -d  \
+        '{"uri": "s3://dtool-demo/ba92a5fa-d3b4-4f10-bcb9-947f62e652db"}'  \
+        http://localhost:5000/dataset/manifest
 
 
 Getting information about one's own permissions
@@ -430,7 +433,7 @@ Getting information about one's own permissions
 
 A user can find out about his/her own permissions using the command below::
 
-    $ curl -H $HEADER http://localhost:5000/user/info/olssont
+    $ curl -H "$HEADER" http://localhost:5000/user/info/olssont
 
 Response content::
 
@@ -459,6 +462,7 @@ Registering a dataset
 Below is an example of how to register a dataset::
 
     $ DATASET_INFO='{
+      "annotations": {},
       "base_uri": "s3://dtool-demo",
       "created_at": 1537802877.62,
       "creator_username": "olssont",
@@ -481,7 +485,6 @@ Below is an example of how to register a dataset::
         -X POST -d $DATASET_INFO  \
         http://localhost:5000/dataset/register
 
-Not all of the metadata above is required.
 The required keys are defined in the variable
 ``dtool_lookup_server.utils.DATASET_INFO_REQUIRED_KEYS``.
 
@@ -502,7 +505,7 @@ Listing registered users
 
 To list all the registered users an admin user can use the below::
 
-    $ curl -H $HEADER http://localhost:5000/admin/user/list
+    $ curl -H "$HEADER" http://localhost:5000/admin/user/list
 
 Response content::
 
@@ -531,7 +534,7 @@ Registering users
 
 An admin user can register other users in batch::
 
-    $ curl -H $HEADER -H "Content-Type: application/json"  \
+    $ curl -H "$HEADER" -H "Content-Type: application/json"  \
         -X POST -d '[{"username": "admin", "is_admin": true}, {"username": "joe"}]'  \
         http://localhost:5000/admin/user/register
 
@@ -543,7 +546,7 @@ Registering a base URI
 
 An admin user can register a new base URI::
 
-    $ curl -H $HEADER -H "Content-Type: application/json"  \
+    $ curl -H "$HEADER" -H "Content-Type: application/json"  \
         -X POST -d '{"base_uri": "s3://another-bucket"}'  \
         http://localhost:5000/admin/base_uri/register
 
@@ -553,7 +556,7 @@ Listing registered base URIs
 
 An admin user can list all registered base URIs::
 
-    $ curl -H $HEADER http://localhost:5000/admin/base_uri/list
+    $ curl -H "$HEADER" http://localhost:5000/admin/base_uri/list
 
 Response content::
 
@@ -580,7 +583,7 @@ Updating the permissions on a base URI
 
 An admin user can update the permissions on a base URI::
 
-    $ curl -H $HEADER -H "Content-Type: application/json"  \
+    $ curl -H "$HEADER" -H "Content-Type: application/json"  \
         -X POST -d '{
           "base_uri": "s3://another-bucket",
           "users_with_register_permissions": [
@@ -594,7 +597,7 @@ An admin user can update the permissions on a base URI::
 
 Note that the request below can be used to clear all existing permissions::
 
-    $ curl -H $HEADER -H "Content-Type: application/json"  \
+    $ curl -H "$HEADER" -H "Content-Type: application/json"  \
         -X POST -d '{
           "base_uri": "s3://another-bucket",
           "users_with_register_permissions": [],
@@ -607,7 +610,7 @@ Getting informations about the permissions on a base URI
 
 An admin user can get information about the permissions on a base URI::
 
-    $ curl -H $HEADER -H "Content-Type: application/json"  \
+    $ curl -H "$HEADER" -H "Content-Type: application/json"  \
         -X POST -d '{"base_uri": "s3://another-bucket"}'  \
         http://localhost:5000/admin/permission/info
 

@@ -35,6 +35,8 @@ DATASET_INFO_REQUIRED_KEYS = (
     "manifest",
     "creator_username",
     "frozen_at",
+    "annotations",
+    "tags",
 )
 
 
@@ -57,8 +59,8 @@ def _get_base_uri_obj(base_uri):
 
 
 def _dict_to_mongo_query(query_dict):
-    valid_keys = ["free_text", "creator_usernames", "base_uris"]
-    list_keys = ["creator_usernames", "base_uris"]
+    valid_keys = ["free_text", "creator_usernames", "base_uris", "tags"]
+    list_keys = ["creator_usernames", "base_uris", "tags"]
 
     def _sanitise(query_dict):
         for key in list(query_dict.keys()):
@@ -74,6 +76,12 @@ def _dict_to_mongo_query(query_dict):
             return {key: l[0]}
         else:
             return {"$or": [{key: v} for v in l]}
+
+    def _deal_with_possible_and_statement(l, key):
+        if len(l) == 1:
+            return {key: l[0]}
+        else:
+            return {key: {"$all": l}}
 
     _sanitise(query_dict)
 
@@ -92,6 +100,13 @@ def _dict_to_mongo_query(query_dict):
             _deal_with_possible_or_statment(
                 query_dict["base_uris"],
                 "base_uri"
+            )
+        )
+    if "tags" in query_dict:
+        sub_queries.append(
+            _deal_with_possible_and_statement(
+                query_dict["tags"],
+                "tags"
             )
         )
 
@@ -135,6 +150,16 @@ def generate_dataset_info(dataset, base_uri):
 
     # Add the manifest.
     dataset_info["manifest"] = dataset._manifest
+
+    # Add the annotations.
+    annotations = {}
+    for annotation_name in dataset.list_annotation_names():
+        annotations[annotation_name] = dataset.get_annotation(annotation_name)
+    dataset_info["annotations"] = annotations
+
+    # Add the tags.
+    tags = dataset.list_tags()
+    dataset_info["tags"] = tags
 
     # Clean up datetime.data.
     dataset_info_json_str = json.dumps(dataset_info, default=_json_serial)
@@ -270,7 +295,15 @@ def search_datasets_by_user(username, query):
 
     datasets = []
     mongo_query = _dict_to_mongo_query(query)
-    cx = mongo.db[MONGO_COLLECTION].find(mongo_query, {"_id": False})
+    cx = mongo.db[MONGO_COLLECTION].find(
+        mongo_query,
+        {
+            "_id": False,
+            "readme": False,
+            "manifest": False,
+            "annotations": False,
+        }
+    )
     for ds in cx:
         datasets.append(ds)
     return datasets
@@ -282,13 +315,13 @@ def summary_of_datasets_by_user(username):
     Return dictionary of summary information.
     Raises AuthenticationError if user is invalid.
     """
-    def _unique(l):
-        return list(set(l))
 
     # Get all the datasets the user has access to.
     datasets = search_datasets_by_user(username, query={})
+
     datasets_per_creator = {}
     datasets_per_base_uri = {}
+    datasets_per_tag = {}
 
     for ds in datasets:
         user = ds["creator_username"]
@@ -296,12 +329,23 @@ def summary_of_datasets_by_user(username):
         datasets_per_creator[user] = datasets_per_creator.get(user, 0) + 1
         datasets_per_base_uri[uri] = datasets_per_base_uri.get(uri, 0) + 1
 
+        # All datasets should have the "tags" key. However, it could be the
+        # case that a dataset in the database prior to version 0.14.0 fails
+        # to be re-indexed. In this case it would be left without having tags
+        # added to it. In the below we therefore check to make sure that it is
+        # present before we try to use it.
+        if "tags" in ds:
+            for tag in ds["tags"]:
+                datasets_per_tag[tag] = datasets_per_tag.get(tag, 0) + 1
+
     summary = {
         "number_of_datasets": len(datasets),
         "creator_usernames": sorted(datasets_per_creator.keys()),
         "base_uris": sorted(datasets_per_base_uri.keys()),
         "datasets_per_creator": datasets_per_creator,
         "datasets_per_base_uri": datasets_per_base_uri,
+        "tags": sorted(datasets_per_tag.keys()),
+        "datasets_per_tag": datasets_per_tag,
     }
 
     return summary
@@ -437,11 +481,17 @@ def _extract_created_at_as_datetime(admin_metadata):
     return datetime.utcfromtimestamp(created_at)
 
 
+def _extract_frozen_at_as_datatime(admin_metadata):
+    frozen_at = admin_metadata["frozen_at"]
+    frozen_at = float(frozen_at)
+    return datetime.utcfromtimestamp(frozen_at)
+
+
 def register_dataset_admin_metadata(admin_metadata):
     """Register the admin metadata in the dataset SQL table."""
     base_uri = get_base_uri_obj(admin_metadata["base_uri"])
 
-    frozen_at = datetime.utcfromtimestamp(float(admin_metadata["frozen_at"]))
+    frozen_at = _extract_frozen_at_as_datatime(admin_metadata)
     created_at = _extract_created_at_as_datetime(admin_metadata)
 
     dataset = Dataset(
@@ -479,7 +529,7 @@ def _register_dataset_descriptive_metadata(collection, dataset_info):
     if not dataset_info_is_valid(dataset_info):
         return None
 
-    frozen_at = datetime.utcfromtimestamp(float(dataset_info["frozen_at"]))
+    frozen_at = _extract_frozen_at_as_datatime(dataset_info)
     created_at = _extract_created_at_as_datetime(dataset_info)
 
     dataset_info["frozen_at"] = frozen_at
@@ -541,13 +591,6 @@ def get_admin_metadata_from_uri(uri):
     return dataset.as_dict()
 
 
-def get_readme_from_uri(uri):
-    """Return the readme information."""
-    collection = mongo.db[MONGO_COLLECTION]
-    item = collection.find_one({"uri": uri})
-    return item["readme"]
-
-
 def get_readme_from_uri_by_user(username, uri):
     """Return the readme.
 
@@ -575,6 +618,35 @@ def get_readme_from_uri_by_user(username, uri):
     if item is None:
         raise(UnknownURIError())
     return item["readme"]
+
+
+def get_annotations_from_uri_by_user(username, uri):
+    """Return the annotations.
+
+    :param username: username
+    :param uri: dataset URI
+    :returns: dataset annotations
+    :raises: AuthenticationError if user is invalid.
+             AuthorizationError if the user has not got permissions to read
+             content in the base URI
+             UnknownBaseURIError if the base URI has not been registered.
+             UnknownURIError if the URI is not available to the user.
+    """
+    user = get_user_obj(username)
+
+    base_uri_str = uri.rsplit("/", 1)[0]
+    base_uri = _get_base_uri_obj(base_uri_str)
+    if base_uri is None:
+        raise(UnknownBaseURIError())
+
+    if base_uri not in user.search_base_uris:
+        raise(AuthorizationError())
+
+    collection = mongo.db[MONGO_COLLECTION]
+    item = collection.find_one({"uri": uri})
+    if item is None:
+        raise(UnknownURIError())
+    return item["annotations"]
 
 
 def get_manifest_from_uri_by_user(username, uri):

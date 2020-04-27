@@ -1,7 +1,7 @@
 from setuptools import setup
 
 url = "https://github.com/jic-dtool/dtool-lookup-server"
-version = "0.12.0"
+version = "0.14.1"
 readme = open('README.rst').read()
 
 setup(
@@ -27,7 +27,7 @@ setup(
         "flask-migrate",
         "flask-pymongo",
         "flask-cors",
-        "dtoolcore",
+        "dtoolcore>=3.17.0",
         "dtool_irods",
         "dtool_s3",
         "dtool_ecs",

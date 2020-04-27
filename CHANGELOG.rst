@@ -31,6 +31,62 @@ Security
 ^^^^^^^^
 
 
+[0.14.1] - 2020-04-02
+---------------------
+
+Fixed
+^^^^^
+
+- Made /dataset/summary route able to cope with individual datasets in the
+  mongo database missing the tags key
+
+
+[0.14.0] - 2020-04-01
+---------------------
+
+Added
+^^^^^
+
+- Added "tags" and "datasets_per_tag" keys to JSON response from
+  /dataset/summary route
+- Added ability to filter/search based on tags
+
+
+Changed
+^^^^^^^
+
+- Registering a dataset now requires a key for ``tags`` in the JSON
+  content
+
+
+[0.13.0] - 2020-03-10
+---------------------
+
+Added
+^^^^^
+
+- Added /dataset/annotations route to which one can POST a URI and get back the
+  associated dataset annotations
+
+
+Changed
+^^^^^^^
+
+- Registering a dataset now requires a key for ``annotations`` in the JSON
+  content
+- The /dataset/search route no longer returns manifest and readme in the body
+  of the JSON response. These will now have to be retrieved using the
+  /dataset/manifest and /dataset/readme routes respectively. This change was
+  implemented to overcome the slow response time when accessing many (>1000)
+  datasets using the /dataset/search route. 
+
+Fixed
+^^^^^
+
+- Made registration of datasets more tolerant to type of frozen_at in
+  admin_metadata, now accepts value as a string
+
+
 [0.12.0] - 2020-02-27
 ---------------------
 
